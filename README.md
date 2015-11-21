@@ -9,3 +9,6 @@ It uses:
 ---  form setup and inputs scan functions, form verification with UUID
 ---  String prototype extensions
 ---  internalization
+
+Module named web2spa.js, it performs all the magic and must be linked as:
+<script src="{{=URL('static','js/web2spa.js')}}"></script>
