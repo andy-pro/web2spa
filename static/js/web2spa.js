@@ -126,7 +126,7 @@ var web2spa = {
 	this.navigate((s==401) ? this.login_request() : this.error_path + '%s/%s'.format(s, txt || ''));
     },
     add_route: function(args) {
-    /***  add route, path=name.toLowerCase, templateId=name+Tmpl, controller=name+Ctrl
+    /***  add route, path=name.toLowerCase, templateId=(template or name)+Tmpl, controller=name+Ctrl
 	opts is:
 	    index=true: path is empty, e.g. 'welcome/default/index:'
 	    index=false:  path=controller, e.g. 'welcome/default/index:lorem'; option is default
@@ -135,6 +135,9 @@ var web2spa = {
 		in so doing perform calling 'welcome/default/index' function, after that perform JS IpsumCtrl(); option is default
 	    ctrl: server controller for this route, mainctrl if empty
 	    page: server function for this route, mainpage if empty
+	    target: id of the html element for content, 'target' by default
+	    template: id of the template, route title by default
+	    shortcuts: shortcut urls for this route, e.g. 'welcome/default/index', 'welcome/default', 'welcome'
 	    login_req=true: will be redirect to login path, if not authorized
 	    login_path=true: this route is login path pluralistically
 	    error_path=true: this route is used for error handling, master=true for this, so e.g. 'welcome/default:error'
@@ -150,7 +153,7 @@ var web2spa = {
 	this.routes[route] = {
 	    title: title,
 	    ajaxurl: lowtitle,
-	    templateId: title+'Tmpl',
+	    templateId: (opts.template||title)+'Tmpl',
 	    controller: window[title+'Ctrl'],
 	    login_req: opts.login_req,
 	    target: target,
