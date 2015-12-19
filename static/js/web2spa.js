@@ -14,8 +14,9 @@ var web2spa = {
 	    esc_back: enable history.back() when 'ESC' key pressed,
 	    routes: [ ['Route1', opts], ['Route2', opts], ... ], opts see in 'add_route'
 	    selector: this hyperlinks will be redirect to javascript calls instead url, 'a.web2spa' is default
-	    beforeStart: this function will be perform before application start, but after application load & init
-	    beforeNavigate: this function will be called before route choose
+	    beforeStart: callback perform before application start, but after application load & init
+	    beforeNavigate: callback perform before route choose
+	    afterNavigate: callback perform after controller execute
 	*/
 	/*** Global vars & objects: ***/
 	//$scope - controller data
@@ -40,7 +41,7 @@ var web2spa = {
 	this.ajax_path = '/%s/%s/'.format(this.app,opts.ajaxctrl||this.mainctrl);	// e.g. '/welcome/ajax/'
 	this.post_url = opts.post_url||'update';	// form POST url request, e.g. 'update' become '/welcome/ajax/update/'
 	this.target = opts.target||'target';
-	this.targetEl = document.getElementById(this.target);
+	this.targetEl = $('#'+this.target);
 	//this.body = $('body');
 	this.gif = $('div#gif');
 	this.msg_div = $("div.flash");
@@ -51,6 +52,7 @@ var web2spa = {
 	this.$clrd = 'panel-danger';
 	this.post_back = opts.post_back;
 	this.beforeNavigate = opts.beforeNavigate;
+	this.afterNavigate = opts.afterNavigate;
 	if (opts.esc_back) document.onkeydown = function(e)	{   // enable history.back() when 'ESC' key pressed
 	    if (e.keyCode == 27) { history.back(); return false; }  // escape key code check
 	}
@@ -61,8 +63,8 @@ var web2spa = {
 	    $.each(opts.routes, function () { self.add_route(this); });
 	    //console.info(self);
 	    /*** add custom live events ***/
-	    $('body').on('click', opts.selector||'a.web2spa', {add:true}, self.ajax_nav);
-	    $('body').on('click', 'a[href*="default\/user"]', function(e){  // here begin spikes :(, ajax auth implementation is very bent
+	    $('body').on('click', opts.selector||'a.web2spa', function(e) { e.data = {url:$(this).attr('href'), add:true}; self.ajax_nav(e); });
+	    $('body').on('click', 'a[href*="default\/user"]', function(e) {  // here begin spikes :(, ajax auth implementation is very bent
 		e.data = {url:$(this).attr('href'), add:true, no_vars:true};
 		if (e.data.url.indexOf('logout')==-1) self.ajax_nav(e);  // all 'user/...' function performed via ajax, but not 'logout'
 	    });
@@ -72,7 +74,7 @@ var web2spa = {
 	});
     },
 
-    ajax_nav: function(e)  { e.preventDefault(); /*e.stopPropagation();*/ web2spa.navigate(e.data.url || $(this).attr('href'), e.data); /*return false;*/ },
+    ajax_nav: function(e)  { e.preventDefault(); /*e.stopPropagation();*/ this.navigate(e.data.url, e.data); /*return false;*/ },
 
     get_url: function() { return location.pathname + location.search; },
 
@@ -89,7 +91,7 @@ var web2spa = {
 
     loadHTML: function(ajaxurl) {
 	$scope = this.load(ajaxurl, {json:false, unescape:true});
-	if ($scope) $route.targetEl.innerHTML = $scope;
+	if ($scope) $route.targetEl.html($scope);
     },
 
     load: function(ajaxurl, params) {    /*** Ajax sync Load  ***/
@@ -140,7 +142,7 @@ var web2spa = {
 		in so doing perform calling 'welcome/default/index' function, after that perform JS IpsumCtrl(); option is default
 	    ctrl: server controller for this route, mainctrl if empty
 	    page: server function for this route, mainpage if empty
-	    target: id of the html element for content, 'target' by default
+	    target: id of the html element for content, web2spa.target by default
 	    template: id of the template, route title by default
 	    shortcuts: shortcut urls for this route, e.g. 'welcome/default/index', 'welcome/default', 'welcome'
 	    login_req=true: will be redirect to login path, if not authorized
@@ -162,7 +164,7 @@ var web2spa = {
 	    controller: window[title+'Ctrl'],
 	    login_req: opts.login_req,
 	    target: target,
-	    targetEl: document.getElementById(target)
+	    targetEl: $('#'+target)
 	}
 	if (opts.login_path) this.login_path = '/%s/%s/'.format(path,ctrl);
 	if (opts.error_path) this.error_path = '/%s/%s/'.format(path,ctrl);
@@ -209,6 +211,7 @@ var web2spa = {
 		}
 	    }
 	}
+	run(this.afterNavigate);
     },
     /* end Router */
 
@@ -230,11 +233,11 @@ var web2spa = {
     render: function (o){    // render to element
 	o = o || {};
 	o.id = o.id || $route.templateId;
-	var El = o.target ? document.getElementById(o.target) : $route.targetEl,
+	var El = o.target ? $('#'+o.target) : $route.targetEl,
 	    st = this._render(o);
-	if (o.append)  El.insertAdjacentHTML('beforeend', st);	// add rendering to element
+	if (o.append)  El.append(st);	// add rendering to element
 	else {
-	    El.innerHTML = st;
+	    El.html(st);
 	    document.title = (o.title || $route.title).unescapeHTML();
 	}
     },
@@ -245,7 +248,7 @@ var web2spa = {
     },
     load_and_render: function(cb) {
 	$scope = this.load();
-	if ($scope) web2spa.render(typeof cb == 'function' ? cb() : {});
+	if ($scope) this.render(typeof cb == 'function' ? cb() : {});
     },
     /* end Resig template system */
 
@@ -282,9 +285,9 @@ var web2spa = {
 function Form(hS, opts) {
     opts = opts || {};
     this.panel = $('div.panel').filter(':first');
-    this.form = opts.form ? $(document.getElementById(opts.form)) : this.panel.find('form');
-    this.chaintable = $("#chaintable");
-    this.cache = {};     // use own data cache for ajax request
+    //this.form = opts.form ? $(document.getElementById(opts.form)) : this.panel.find('form');
+    this.form = opts.form ? $('#'+opts.form) : this.panel.find('form');
+    //this.chaintable = $("#chaintable");
     this.inputfirst = this.form.find("input:text:visible:first");
     this.inputfirst.focus();
     this.hC = opts.hC;
@@ -295,24 +298,28 @@ function Form(hS, opts) {
     this.post_url = opts.action || (act ? act.value : false) || web2spa.post_url;
     this.inputs = {};
     var self = this;
-    this.inputstext = this.form.find('input[type!=checkbox][name]').on('input', function(e){ self.change(e, this); });
-    this.inputscheckbox = this.form.find('input:checkbox[name]').on('change', function(e){ self.change(e, this); });
+    //this.inputstext = this.form.find('input[type!=checkbox][name]').data('this',this).on('input', function(e){ self.change(e, this); });
+    this.inputstext = this.form.find('input[type!=checkbox][name]').data('this',this).on('input', this.change);
+    //this.inputscheckbox = this.form.find('input:checkbox[name]').on('change', function(e){ self.change(e, this); });
+    this.inputscheckbox = this.form.find('input:checkbox[name]').data('this',this).on('change', this.change);
     if (typeof hS == 'function') this.form.submit(hS);	// register hS function as submit
 }
 
 // emulate input change handler run, fill all inputs fields
 Form.prototype.init = function() { this.inputfirst.trigger('input'); }
 
-Form.prototype.change = function(event, El) {
-    var self = this;	// Form
-    this.inputstext.each(function() { self.inputs[this.name] = this.value; });
-    this.inputscheckbox.each(function() { self.inputs[this.name] = Number(this.checked); });
-    if (El.classList.contains('delete')) {
-	var del = this.inputs.delete;
-	this.panel.removeClass(del ? web2spa.$clrp : web2spa.$clrd);
-	this.panel.addClass(del ? web2spa.$clrd : web2spa.$clrp);
+Form.prototype.change = function(event) {
+    var self = $(this).data('this');	// Form
+    self.inputstext.each(function() { self.inputs[this.name] = this.value; });
+    self.inputscheckbox.each(function() { self.inputs[this.name] = Number(this.checked); });
+    if (this.classList.contains('delete')) {
+	var del = self.inputs.delete;
+	self.panel.removeClass(del ? web2spa.$clrp : web2spa.$clrd);
+	self.panel.addClass(del ? web2spa.$clrd : web2spa.$clrp);
     }
-    run.call(this.hC, event, El);
+    //run.call(self.hC, event, this);
+    //if (typeof self.hC == 'function') self.hC.call(this, event);
+    run_hE(self.hC, this, event);
     return false;
 }
 
@@ -346,8 +353,9 @@ Form.prototype.post = function(form) {
 /*** log Helper  ***/
 function log(msg) { console.log(msg); }
 
-/*** run Helper, using: run(function), if no arguments; run.call(function, arguments...) instead. Method 'apply' pass arguments as collection ***/
-function run() { if (this == window) { if (typeof arguments[0] == 'function') arguments[0](); } else if (typeof this == 'function') this.apply(this, arguments); }
+/*** run Helpers, using: run(function), if no arguments; run.call(function, arguments...) instead. Method 'apply' pass arguments as collection ***/
+function run() { if (this == window) { if (typeof arguments[0] == 'function') arguments[0](); } else if (typeof this == 'function') this.apply(window, arguments); }
+function run_hE(f, El, event) { if (typeof f == 'function') f.call(El, event); }
 
 /*** String Helpers  ***/
 String.prototype.escapeHTML = function() { return this.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\"/g,'&quot;'); }
@@ -367,6 +375,20 @@ String.prototype.replace_set = function(set) {	// replace by array of regex rule
     for(var i in set) newStr = newStr.replace(set[i][0], set[i][1]);
     return newStr;
 };
+String.prototype.repeat = function(count) {
+    if (count < 1) return '';
+    var result = '', pattern = this.valueOf();
+    while (count > 1) {
+        if (count & 1) result += pattern;
+        count >>= 1, pattern += pattern;
+    }
+    return result + pattern;
+};
+String.prototype.frontZero = function(count) {
+    var newStr = this;
+    while (newStr.length < count) newStr = '0' + newStr;
+    return newStr;
+}
 
 /*** Prototype: CheckBox, performs set/get data to/from localStorage ***/
     /* constructor, usage: var flag = new CheckBox(id, hC);
@@ -390,7 +412,7 @@ CheckBox.prototype.init = function(hC, runonce) {
     }
 }
 CheckBox.prototype.click = function(checked) {
-    console.log('click:', this);
+    //console.log('click:', this);
     localStorage[this.name] = checked;
     this.value = checked;
     run.call(this.handler, checked);

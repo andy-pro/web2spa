@@ -10,5 +10,4 @@ It uses:
 ---  String prototype extensions
 ---  internalization
 
-Module named web2spa.js, it performs all the magic and must be linked as:
-<script src="{{=URL('static','js/web2spa.js')}}"></script>
+Module named web2spa.js, it performs all the magic and must be linked as "static/js/web2spa.js"
