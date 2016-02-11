@@ -6,7 +6,7 @@ var web2spa = {
 	    mainctrl: default controller, 'default' by default,
 	    mainpage: default function, 'index' by default,
 	    ajaxctrl: ajax request controller, mainctrl by default,
-	    lexicon_url: type 'lexicon' for 'welcome/ajax/lexicon.json',
+	    lexicon: type 'lexicon' for 'welcome/ajax/lexicon.json',
 	    post_url: POST form request path; type 'update'(default) for 'welcome/ajax/update',
 	    target: type 'content' for '<div id='content'>, 'target' by default,
 	    templates: type 'templates' for 'welcome/views/templates.html',
@@ -29,7 +29,7 @@ var web2spa = {
 	    type: default GET,
 	    unescape: if true, data will be as is; by default all data escaped,
 	    animate: show 'loading.gif' while ajax go on,
-	    data: send to server
+	    txdata: transmit to server
 	*/
 	// !!! important: urls or url's parts in opts object must be without slashes
 	this.app = opts.app;    // e.g. 'welcome'
@@ -38,11 +38,10 @@ var web2spa = {
 	this.root_path = '/%s/%s/'.format(this.app,this.mainctrl);       // e.g. '/welcome/default/'
 	this.start_path = '%s%s/'.format(this.root_path,this.mainpage);	// e.g. '/welcome/default/index/'
 	this.static_path = '/%s/static/'.format(this.app);               // e.g. '/welcome/static/'
-	this.ajax_path = '/%s/%s/'.format(this.app,opts.ajaxctrl||this.mainctrl);	// e.g. '/welcome/ajax/'
+	this.ajax_path = '/%s/%s/'.format(this.app,opts.ajaxctrl||this.mainctrl);   // e.g. '/welcome/ajax/'
 	this.post_url = opts.post_url||'update';	// form POST url request, e.g. 'update' become '/welcome/ajax/update/'
 	this.target = opts.target||'target';
 	this.targetEl = $('#'+this.target);
-	//this.body = $('body');
 	this.gif = $('div#gif');
 	this.msg_div = $("div.flash");
 	this.$clrp = 'panel-primary';	// shortcuts for bootstrap panel color classes
@@ -53,15 +52,17 @@ var web2spa = {
 	this.post_back = opts.post_back;
 	this.beforeNavigate = opts.beforeNavigate;
 	this.afterNavigate = opts.afterNavigate;
-	if (opts.esc_back) document.onkeydown = function(e)	{   // enable history.back() when 'ESC' key pressed
+	if (opts.esc_back) document.onkeydown = function(e) {   // enable history.back() when 'ESC' key pressed
 	    if (e.keyCode == 27) { history.back(); return false; }  // escape key code check
 	}
-	var self = this;    // for use inside jQuery functions, were 'this' changed
-	if (opts.lexicon_url) this.lexicon = this.load(opts.lexicon_url, {unescape:true});
-	$(function() {	// waiting full application loading
-	    if (opts.templates) self.add_pack(self.load(opts.templates, {unescape:true, json:false}));
+	var self = this, promises = [$.ready];   // waiting document ready
+	if (opts.lexicon) {
+	    this.lexicon = {ajaxurl:opts.lexicon, unescape:true, data:true};
+	    promises.push(this.load(this.lexicon));
+	}
+	if (opts.templates) promises.push(this.load({ajaxurl:opts.templates, unescape:true, json:false, data:true, onload:this.add_pack}));
+	$.when.apply($, promises).always(function() {
 	    $.each(opts.routes, function () { self.add_route(this); });
-	    //console.info(self);
 	    /*** add custom live events ***/
 	    $('body').on('click', opts.selector||'a.web2spa', function(e) { e.data = {url:$(this).attr('href'), add:true}; self.ajax_nav(e); });
 	    $('body').on('click', 'a[href*="default\/user"]', function(e) {  // here begin spikes :(, ajax auth implementation is very bent
@@ -79,7 +80,7 @@ var web2spa = {
     get_url: function() { return location.pathname + location.search; },
 
     get_ajax_url: function(ajaxurl, params) {
-	params = params || $request;
+	params || (params = $request);
 	var url = '';
 	var json = params.json === false ? '' : '.json';
 	if (!params.clearpath) {
@@ -90,39 +91,35 @@ var web2spa = {
     },
 
     loadHTML: function(ajaxurl) {
-	$scope = this.load(ajaxurl, {json:false, unescape:true});
-	if ($scope) $route.targetEl.html($scope);
+	this.load({ajaxurl:ajaxurl, json:false, unescape:true, onload:function() { if ($scope) $route.targetEl.html($scope); }});
     },
 
-    load: function(ajaxurl, params) {    /*** Ajax sync Load  ***/
-	ajaxurl = ajaxurl || $route.ajaxurl;
-	params = params || {};
-	$.extend(params, $request);
-	//if (params.animate) this.body.addClass('loading');
-	var out, self = this;
-	$.ajax({
-	    url: this.get_ajax_url(ajaxurl, params),
-	    type: params.type || 'GET',
-	    async: false,
-	    data: params.data,
+    load: function(opts) {    /*** Ajax async Load  ***/
+	opts || (opts = {});
+	$.extend(opts, $request);
+	var self = this;
+	return $.ajax({
+	    url: this.get_ajax_url(opts.ajaxurl || $route.ajaxurl, opts),
+	    type: opts.type || 'GET',
+	    data: opts.txdata,
 	    processData: false,
 	    contentType: false,
-	    dataFilter: params.unescape ? undefined : function(data) { return data.escapeHTML(); },
-	    beforeSend: function() { if (params.animate) self.gif.show(); },
-	    success: function(data, textStatus, jqXHR) {
-		out=data;
-		//console.info(out);
-		$userId=parseInt(jqXHR.getResponseHeader('User-Id'));  // userId = NaN or > 0
-		$Admin=Boolean(jqXHR.getResponseHeader('Admin'));   // if user has membership 'administrator'
-	    },
-	    error: function(jqXHR, txt, obj) {
-		console.warn(jqXHR); console.warn(txt); console.warn(obj);
-		self.raise_error(jqXHR.status, txt);
-		out = false;
-	    },
-	    complete: function() { /*self.body.removeClass('loading');*/ self.gif.hide(); }
+	    dataFilter: opts.unescape ? undefined : function(data) { return data.escapeHTML(); },
+	    beforeSend: function() { if (opts.animate) self.gif.show(); }
+	}).always(function(data, status, _x) {
+	    self.gif.hide();
+	    if (status=='success') {
+		$userId=parseInt(_x.getResponseHeader('User-Id'));  // userId = NaN or > 0
+		$Admin=Boolean(_x.getResponseHeader('Admin'));   // if user has membership 'administrator'
+	    } else {
+		console.warn(data); console.warn(status); console.warn(_x);
+		self.raise_error(data.status, status);
+		data = false;
+	    }
+	    if (opts.data) opts.data = data;
+	    else $scope = data;
+	    if (typeof opts.onload === 'function') opts.onload.call(self, data);
 	});
-	return out;
     },
 
     /*** Router ***/
@@ -230,25 +227,33 @@ var web2spa = {
 	var self = this;
 	$.each(pack, function(){ self.add(this.id, this.text); });
     },
-    render: function (o){    // render to element
-	o = o || {};
-	o.id = o.id || $route.templateId;
-	var El = o.target ? $('#'+o.target) : $route.targetEl,
-	    st = this._render(o);
-	if (o.append)  El.append(st);	// add rendering to element
+    render: function (_o){    // render to element
+	_o = _o || {};
+	_o.id = _o.id || $route.templateId;
+	var El = _o.target ? $('#'+_o.target) : $route.targetEl,
+	    st = this._render(_o);
+	if (_o.append)  El.append(st);	// add rendering to element
 	else {
 	    El.html(st);
-	    document.title = (o.title || $route.title).unescapeHTML();
+	    document.title = (_o.title || $route.title).unescapeHTML();
 	}
     },
-    _render: function (o) {     // render to string
-	var id = o.id;
+    _render: function (_o) {     // render to string
+	var id = _o.id;
 	if (!this.cache[id]) this.add(id, document.getElementById(id).innerHTML);   // try search template in current html document, if not found in cache
-	return (typeof this.cache[id] == 'function') ? this.cache[id](o.data || {}) : '';
+	return (typeof this.cache[id] === 'function') ? this.cache[id](_o.data || {}) : '';
     },
-    load_and_render: function(cb) {
-	$scope = this.load();
-	if ($scope) this.render(typeof cb == 'function' ? cb() : {});
+    load_and_render: function()	{   // takes array of functions: 0-return object for rendering, 1...n-some code after rendering
+	var args = arguments;
+	this.load({onload:function(data){
+	    if (data) {
+		for (var i=0; i < args.length; i++) {
+		    var _o = args[i];
+		    if (i) run(_o); // 'onRender complete' handlers, if exists
+		    else this.render(typeof _o === 'function' ? _o() : _o);  // for first argument check - 'onLoad complete' handler or render object
+		}
+	    }
+	}});
     },
     /* end Resig template system */
 
@@ -279,15 +284,13 @@ var web2spa = {
     opts is:
 	hC - input change handler - callback, will be performed, when any input changing occured
 	form - form id; find first form in panel, if empty
-	safe - do not send secure form data CSRF to server, false is default
+	safe - do not send secure form data CSRF to server, default 'false'
 	action - POST form request url
     */
 function Form(hS, opts) {
     opts = opts || {};
     this.panel = $('div.panel').filter(':first');
-    //this.form = opts.form ? $(document.getElementById(opts.form)) : this.panel.find('form');
     this.form = opts.form ? $('#'+opts.form) : this.panel.find('form');
-    //this.chaintable = $("#chaintable");
     this.inputfirst = this.form.find("input:text:visible:first");
     this.inputfirst.focus();
     this.hC = opts.hC;
@@ -298,65 +301,58 @@ function Form(hS, opts) {
     this.post_url = opts.action || (act ? act.value : false) || web2spa.post_url;
     this.inputs = {};
     var self = this;
-    //this.inputstext = this.form.find('input[type!=checkbox][name]').data('this',this).on('input', function(e){ self.change(e, this); });
     this.inputstext = this.form.find('input[type!=checkbox][name]').data('this',this).on('input', this.change);
-    //this.inputscheckbox = this.form.find('input:checkbox[name]').on('change', function(e){ self.change(e, this); });
     this.inputscheckbox = this.form.find('input:checkbox[name]').data('this',this).on('change', this.change);
-    if (typeof hS == 'function') this.form.submit(hS);	// register hS function as submit
+    if (typeof hS === 'function') this.form.submit(hS);	// register hS function as submit
 }
 
-// emulate input change handler run, fill all inputs fields
-Form.prototype.init = function() { this.inputfirst.trigger('input'); }
-
-Form.prototype.change = function(event) {
-    var self = $(this).data('this');	// Form
-    self.inputstext.each(function() { self.inputs[this.name] = this.value; });
-    self.inputscheckbox.each(function() { self.inputs[this.name] = Number(this.checked); });
-    if (this.classList.contains('delete')) {
-	var del = self.inputs.delete;
-	self.panel.removeClass(del ? web2spa.$clrp : web2spa.$clrd);
-	self.panel.addClass(del ? web2spa.$clrd : web2spa.$clrp);
-    }
-    //run.call(self.hC, event, this);
-    //if (typeof self.hC == 'function') self.hC.call(this, event);
-    run_hE(self.hC, this, event);
-    return false;
-}
-
-/*** Form.post - add formname, formkey, send formData to server via ajax(POST), flash status result; ***/
-Form.prototype.post = function(form) {
-    //console.log(form);
-    var reply = {};
-    if ($scope.formkey && $userId || this.safe) {	// if form security information exist and user is authorized or form is non security
-	var formData = new FormData(form);
-	if (!this.safe) {
-	    formData.append('user', $userId);
-	    formData.append('formname', $scope.formname);
-	    formData.append('formkey', $scope.formkey);
+Form.prototype = {
+    init: function() { this.inputfirst.trigger('input'); },    // emulate input change handler run, fill all inputs fields
+    change: function(event) {
+	var self = $(this).data('this');	// Form
+	self.inputstext.each(function() { self.inputs[this.name] = this.value; });
+	self.inputscheckbox.each(function() { self.inputs[this.name] = Number(this.checked); });
+	if (this.classList.contains('delete')) {
+	    var del = self.inputs.delete;
+	    self.panel.removeClass(del ? web2spa.$clrp : web2spa.$clrd);
+	    self.panel.addClass(del ? web2spa.$clrd : web2spa.$clrp);
 	}
-	if ($scope.formData) for(var fd in $scope.formData) formData.append(fd, $scope.formData[fd]);
-	reply = web2spa.load(this.post_url, {data:formData, type:'POST', animate:form && form.name=='upload'});
-    } else {
-	reply.details = 'Security error!';
-	reply.status = false;
-	reply.location = web2spa.start_path;
+	run_hE(self.hC, this, event);
+	return false;
+    },
+    /*** Form.post - add formname, formkey, send formData to server via ajax(POST), flash status result; ***/
+    post: function(form) {
+	//console.log(form);
+	var reply = {}, promise = true;
+	if ($scope.formkey && $userId || this.safe) {	// if form security information exist and user is authorized or form is non security
+	    reply.txdata = new FormData(form);
+	    if (!this.safe) {
+		reply.txdata.append('user', $userId);
+		reply.txdata.append('formname', $scope.formname);
+		reply.txdata.append('formkey', $scope.formkey);
+	    }
+	    if ($scope.formData) for(var fd in $scope.formData) reply.txdata.append(fd, $scope.formData[fd]);
+	    $.extend(reply, {ajaxurl: this.post_url, type: 'POST', animate: form && form.name=='upload', data: true});
+	    promise = web2spa.load(reply);
+	} else reply.data = {details:'Security error!', status:false, location:web2spa.start_path};
+	$.when(promise).always(function() {
+	    if (reply.data) {
+		web2spa.show_msg(reply.data.details, reply.data.status ? 'success' : 'danger');
+		if (reply.data.location) web2spa.navigate(reply.data.location, {add:true}); else if (web2spa.post_back) history.back();
+	    }
+	});
+	return false;
     }
-    if (reply) {
-	web2spa.show_msg(reply.details, reply.status ? 'success' : 'danger');
-	if (reply.location) web2spa.navigate(reply.location, {add:true}); else if (web2spa.post_back) history.back();
-    }
-    return false;
 }
 /* end form class */
 
 //======================================
 /*** log Helper  ***/
-function log(msg) { console.log(msg); }
-
+function log() { console.log.apply(console, arguments); }
 /*** run Helpers, using: run(function), if no arguments; run.call(function, arguments...) instead. Method 'apply' pass arguments as collection ***/
-function run() { if (this == window) { if (typeof arguments[0] == 'function') arguments[0](); } else if (typeof this == 'function') this.apply(window, arguments); }
-function run_hE(f, El, event) { if (typeof f == 'function') f.call(El, event); }
-
+function run() { if (this == window) { if (typeof arguments[0] === 'function') arguments[0](); } else if (typeof this === 'function') this.apply(window, arguments); }
+function run_hE(f, El, event) { if (typeof f === 'function') f.call(El, event); }
+//======================================
 /*** String Helpers  ***/
 String.prototype.escapeHTML = function() { return this.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\"/g,'&quot;'); }
 String.prototype.unescapeHTML = function() { return this.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"'); }
@@ -389,7 +385,7 @@ String.prototype.frontZero = function(count) {
     while (newStr.length < count) newStr = '0' + newStr;
     return newStr;
 }
-
+//======================================
 /*** Prototype: CheckBox, performs set/get data to/from localStorage ***/
     /* constructor, usage: var flag = new CheckBox(id, hC);
     id -checkbox id
@@ -401,22 +397,23 @@ function CheckBox(name, hC) {
     this.value = (localStorage[name] == 'true');
     this.init(hC);
 }
-CheckBox.prototype.init = function(hC, runonce) {
-    this.handler = hC;
-    var self = this;
-    this.El = $(this.id);
-    this.El.prop('checked', this.value).off();
-    if (hC) {
-	this.El.click(function() { self.click(this.checked); });
-	if (runonce) this.click(this.value);
-    }
+CheckBox.prototype = {
+    init: function(hC, runonce) {
+	this.handler = hC;
+	var self = this;
+	this.El = $(this.id);
+	this.El.prop('checked', this.value).off();
+	if (hC) {
+	    this.El.click(function() { self.click(this.checked); });
+	    if (runonce) this.click(this.value);
+	}
+    },
+    click: function(checked) {
+	//console.log('click:', this);
+	localStorage[this.name] = checked;
+	this.value = checked;
+	run.call(this.handler, checked);
+    },
+    reset_handler: function() { this.handler = null; }
 }
-CheckBox.prototype.click = function(checked) {
-    //console.log('click:', this);
-    localStorage[this.name] = checked;
-    this.value = checked;
-    run.call(this.handler, checked);
-}
-CheckBox.prototype.reset_handler = function() { this.handler = null; }
-
-//======================================
+//==========================================================
