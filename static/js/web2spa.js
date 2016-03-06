@@ -61,6 +61,7 @@ var web2spa = {
 	    promises.push(this.load(this.lexicon));
 	}
 	if (opts.templates) promises.push(this.load({ajaxurl:opts.templates, unescape:true, json:false, data:true, onload:this.add_pack}));
+	if (opts.templates_json) promises.push($.get(this.static_path + opts.templates_json + '.json', function(data) { self.add_json_pack(data); } ));
 	$.when.apply($, promises).always(function() {
 	    $.each(opts.routes, function () { self.add_route(this); });
 	    /*** add custom live events ***/
@@ -216,17 +217,30 @@ var web2spa = {
     /*** we must to build monument him, while he alive :) ***/
     // prefer use "" in templates, be careful with included quotes!
     cache: {},
+    tmpls_json: {},
     render_set: [[/[\r\t\n]/g, " "],[/<%/g, "\t"],[/((^|%>)[^\t]*)'/g, "$1\r"],[/\t=(.*?)%>/g, "',$1,'"],[/\t/g, "');"],[/%>/g, "p.push('"],[/\r/g, "\\'"]],
     min_set: [[/<!--[\s\S]*?-->/g,'']/*remove comments*/,[/\s*([=;<>(){}\[\]&|])\s*/g,'$1'],[/\s*(<%|%>)\s*/g,'$1']/*whitespaces*/],
-    add: function(id, str) {
-	str = str.replace_set(this.min_set).replace_set(this.render_set);
-	this.cache[id] = new Function("obj", "var p=[],print=function(){p.push.apply(p,arguments);};" + "with(obj){p.push('" + str + "');}return p.join('');");
+    add: function(id, str, compile) {
+	//str = str.replace_set(this.min_set).replace_set(this.render_set);
+	//this.cache[id] = new Function("obj", "var p=[],print=function(){p.push.apply(p,arguments);};" + "with(obj){p.push('" + str + "');}return p.join('');");
+	if (compile) str = "var p=[],print=function(){p.push.apply(p,arguments);};with(obj){p.push('" +
+	    str.replace_set(this.min_set).replace_set(this.render_set) +
+	    "');}return p.join('');";
+	this.cache[id] = new Function("obj", str);
+	if (_TMPLS_) this.tmpls_json[id] = str;
     },
     add_pack: function(pack) {
+	//console.time('compile');
 	pack = $(pack).filter('script');
 	var self = this;
-	$.each(pack, function(){ self.add(this.id, this.text); });
+	$.each(pack, function(){ self.add(this.id, this.text, true); });
+	//console.timeEnd('compile');
+	if (_TMPLS_) {
+	    this.tmpls_json = JSON.stringify(this.tmpls_json);
+	    console.log(this.tmpls_json);
+	}
     },
+    add_json_pack: function(pack) { for(var id in pack) this.add(id, pack[id]); },
     render: function (_o){    // render to element
 	_o = _o || {};
 	_o.id = _o.id || $route.templateId;
@@ -240,7 +254,7 @@ var web2spa = {
     },
     _render: function (_o) {     // render to string
 	var id = _o.id;
-	if (!this.cache[id]) this.add(id, document.getElementById(id).innerHTML);   // try search template in current html document, if not found in cache
+	if (!this.cache[id]) this.add(id, document.getElementById(id).innerHTML, true);   // try search template in current html document, if not found in cache
 	return (typeof this.cache[id] === 'function') ? this.cache[id](_o.data || {}) : '';
     },
     load_and_render: function()	{   // takes array of functions: 0-return object for rendering, 1...n-some code after rendering
