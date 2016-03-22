@@ -1,13 +1,19 @@
 # web2spa
 
-JavaScript module for web2py ( www.web2py.com ) framework that helps to build a single-page-application.
-It uses:
----  my own router based on a HTML5 History API
----  templating system based on John Resig code ( http://ejohn.org/blog/javascript-micro-templating/ )
----  login/logout handling, errors handling
----  ajax load helper,
----  form setup and inputs scan functions, form verification with UUID
----  String prototype extensions
----  internalization
+###Single-page application adapter
 
-Module named web2spa.js, it performs all the magic and must be linked as "static/js/web2spa.js"
+JavaScript module for [web2py](http://web2py.com) framework and not only that helps to build a single-page-application.
+  -  trivial round execution
+  -  my own router based on a HTML5 History API
+  -  templating system based on [John Resig](http://ejohn.org/blog/javascript-micro-templating/) code
+  -  using compiled templates
+  -  login/logout handling, errors handling
+  -  ajax load helper,
+  -  form setup and inputs scan functions, form verification with UUID
+  -  events binding
+  -  String prototype extensions
+  -  internalization
+
+###Examples of using:
+  - [Cross management](https://github.com/andy-pro/Cross/tree/single_page_app)
+  - [Channel Monitor](https://github.com/andy-pro/Channel-Monitor)
