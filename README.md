@@ -12,8 +12,9 @@ JavaScript module for [web2py](http://web2py.com) framework and not only that he
   -  form setup and inputs scan functions, form verification with UUID
   -  events binding
   -  String prototype extensions
-  -  internalization
+  -  internationalization
 
 ###Examples of using:
   - [Cross management](https://github.com/andy-pro/Cross/tree/single_page_app)
   - [Channel Monitor](https://github.com/andy-pro/Channel-Monitor)
+  - [Cross-Express](https://github.com/andy-pro/Cross-Express)
